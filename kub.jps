@@ -1,0 +1,62 @@
+type: install
+version: 1.5
+id: kubernetes
+baseUrl: https://raw.githubusercontent.com/jelastic-jps/kubernetes/main
+description:
+  text: /text/description-kube.md
+  short: Kubernetes cluster with automated scaling & cost efficient pay-per-use pricing for running cloud-native microservices.
+categories:
+  - apps/clusters
+  - apps/dev-and-admin-tools
+
+logo: /images/k8s-logo.png
+name: Kubernetes Cluster
+
+ssl: true
+onBeforeInit: /scripts/beforeinit.js
+
+onInstall:
+  - check-version
+
+actions:
+  check-version:
+    - script: |
+        var baseUrl = "${baseUrl}".split("/"); baseUrl.pop(); baseUrl = baseUrl.join("/");
+        var url = baseUrl+"/${settings.version}/manifest.jps"
+        var huc = new java.net.URL(url).openConnection();
+        huc.setRequestMethod("HEAD");
+        var code = huc.getResponseCode();
+        if (code == 200){
+          return {result:0, onAfterReturn:{"install-cluster":{jps: url}}};
+        } else {
+          message = "The specified version ${settings.version} has no installation script!";
+          return {result:"", message: message};
+        }
+
+  install-cluster:
+    - params:
+        jps: ${this.jps}
+        envName: ${settings.envName}
+        displayName: ${settings.displayName}
+        envGroups: ${response.envGroups}
+        region: ${settings.region}
+        settings: ${settings.toJSON()}
+      script: |
+        params = toNative(params);
+        params.envGroups = eval('(' + MANIFEST + ')').envGroups;
+        return api.marketplace.jps.Install(params);
+    - setGlobals:
+        success_text: ${response.successText}
+    - script: |
+        var resp = jelastic.env.control.GetEnvInfo('${settings.envName}', session);
+        if (resp.result != 0) return resp;
+
+        var protoName = resp.env.sslstate ? "https" : "http";
+
+        return {result: 0, onAfterReturn:{ setGlobals:{ start_page: protoName + "://" + resp.env.domain + "/" }}}
+
+startPage: ${globals.start_page}
+
+success:
+  email: false
+  text: ${globals.success_text}
